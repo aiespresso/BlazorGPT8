@@ -1,0 +1,256 @@
+﻿@page "/"
+@inject Services.GPTService GPTService
+@using OpenAI.Chat
+@using System.Text.RegularExpressions
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>Home</PageTitle>
+
+<h1>Ask OpenAI GPT</h1>
+
+<div class="chat-container">
+    <div class="chat-messages">
+        @foreach (var dialog in dialogs)
+        {
+            <div class="chat-message @(dialog.IsPrompt ? "user-message" : "bot-message")">
+                @if (dialog.IsPrompt)
+                {
+                    // The dialog.MessageText is the user input
+                    <span class="message-text">@dialog.MessageText</span>
+                    <img src="images/User.webp" class="message-icon" alt="User icon" />
+                }
+                else
+                {
+                // The dialog.MessageText is the bot response
+                    <img src="images/Robot.webp" class="message-icon" alt="Bot icon" />
+                    <span class="message-text">@((MarkupString)dialog.MessageText)</span>
+                })
+            </div>
+        }
+    </div>
+    <br />
+    <br />
+    <br />
+    <br />
+    <br />
+    <br />
+    <br />
+    <br />
+    <div class="chat-input">
+        <textarea rows="1" cols="5" type="text" @bind="_userInput" placeholder="Input your prompt here..." />
+        <button @onclick="AskOpenAIStreamingAsync">Ask</button>
+    </div>
+</div>
+
+@code {
+
+    #region [00] Shared Variables
+    private string _userInput = string.Empty; // The user input from the input field
+    private string _botResponse = string.Empty; // The bot response received from the GPT service
+    private string _myPrompt = string.Empty; // The prompt to send to the GPT service
+    private List<Dialog> dialogs = new List<Dialog>(); // The list to store the dialog messages
+    private Dialog? lastDialog = null;
+    #endregion
+
+    #region [01] Shared Classes or Methods
+    /// <summary>
+    /// The object to store the dialog message and the message type.
+    /// </summary>
+    private class Dialog
+    {
+        /// <summary>
+        /// To set the message text. It can be a user prompt or a bot response.
+        /// </summary>
+        public string MessageText { get; set; }
+        /// <summary>
+        /// To set the message as a user prompt or a bot response.
+        /// Default is true, which means it is a user prompt.
+        /// </summary>
+        public bool IsPrompt { get; set; } = true;
+    }
+
+    /// <summary>
+    /// Convert markdown string into HTML tags
+    /// </summary>
+    /// <param name="message">The original string containing markdown codes.</param>
+    /// <returns>The converted string with valid HTML tags.</returns>
+    private string ConvertMarkdownToHTML(string message)
+    {
+        string text = message;
+        // 1. Bold font: pattern => **text**
+        text = Regex.Replace(text, @"\*\*(.+)\*\*", "<b>$1</b>");
+
+        // 2. Italic font: pattern => *text*
+        text = Regex.Replace(text, @"\*(.+)\*", "<i>$1</i>");
+
+        // 3. H1 title: pattern => # text
+        text = Regex.Replace(text, @"(?m)^# (.+)", "<h1>$1</h1>");
+
+        // 4. H2 title: pattern => ## text
+        text = Regex.Replace(text, @"(?m)^## (.+)", "<h2>$1</h2>");
+
+        // 5. H3 title: pattern => ### text
+        text = Regex.Replace(text, @"(?m)^### (.+)", "<h3>$1</h3>");
+        text = Regex.Replace(text, @"(?m)^#### (.+)", "<h3>$1</h3>");
+        // 6. Seperator: pattern => ---
+        text = Regex.Replace(text, @"(?m)---$", "<hr />");
+
+        // 7. Email address parsing, matching: pattern => <email@example.com>
+        text = Regex.Replace(text, @"<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>
+        ", "<a href='mailto:$1'>$1</a>");
+        text = Regex.Replace(text, @"\[(.+?)\]\(mailto:(.+?)\)", "<a href='mailto:$2'>$1</a>");
+
+        // 8. URL parsing: pattern => [String](URL)
+        text = Regex.Replace(text, @"\[(.+?)\]\((https?:\/\/[^\s]+)\)", "<a href='$2'>$1</a>");
+
+        return text;
+    }
+    #endregion
+
+    #region [02] Chat Completion Methods - Non-streaming mode
+    /// <summary>
+    /// Call the GPT service to get the response in non-streaming and synchronous mode.
+    /// </summary>
+    private void AskOpenAI()
+    {
+        _myPrompt = _userInput; // Read value from the input field to the prompt variable
+                                // Create a dialog to store the user prompt
+        dialogs.Add(new Dialog
+            {
+                MessageText = _myPrompt, // Add the prompt to the dialogs list
+                IsPrompt = true // This is a user prompt, not a bot response
+            });
+        _userInput = ""; // clear the input field
+        var response = GPTService.GetResponse(_myPrompt); // Call the GPT service to get the response
+        dialogs.Add(new Dialog
+            {
+                MessageText = ConvertMarkdownToHTML(response.Content[0].Text), // Add the response to the dialogs list
+                IsPrompt = false // This is a bot response, not a user prompt
+            });
+        StateHasChanged();
+        JSRuntime.InvokeVoidAsync("scrollToBottom");
+    }
+
+    /// <summary>
+    /// Call the GPT service to get the response in non-streaming and asynchronous mode.
+    /// </summary>
+    private async void AskOpenAIAsync()
+    {
+        _myPrompt = _userInput; // Read value from the input field to the prompt variable
+                                // Create a dialog to store the user prompt
+        dialogs.Add(new Dialog
+            {
+                MessageText = _myPrompt, // Add the prompt to the dialogs list
+                IsPrompt = true // This is a user prompt, not a bot response
+            });
+        _userInput = ""; // clear the input field
+        var response = await GPTService.GetResponseAsync(_myPrompt); // Call the GPT service to get the response
+        dialogs.Add(new Dialog
+            {
+                MessageText = ConvertMarkdownToHTML(response.Content[0].Text), // Add the response to the dialogs list
+                IsPrompt = false // This is a bot response, not a user prompt
+            });
+        StateHasChanged();
+        await JSRuntime.InvokeVoidAsync("scrollToBottom");
+    }
+    #endregion
+
+    #region [03] Chat Completion Methods - Streaming mode
+    private void AskOpenAIStreaming()
+    {
+        _myPrompt = _userInput; // Read value from the input field to the prompt variable
+                                // Create a dialog to store the user prompt
+        dialogs.Add(new Dialog
+            {
+                MessageText = _myPrompt, // Add the prompt to the dialogs list
+                IsPrompt = true // This is a user prompt, not a bot response
+            });
+        _userInput = ""; // clear the input field
+        dialogs.Add(new Dialog
+            {
+                MessageText = "", // Add an empty message to the dialogs list
+                IsPrompt = false // This is a bot response, not a user prompt
+            });
+        lastDialog = dialogs.LastOrDefault();
+        var response = GPTService.GetStreamingResponse(_myPrompt); // Call the GPT service to get the response
+        foreach (StreamingChatCompletionUpdate completionUpdate in response)
+        {
+            if (completionUpdate.ContentUpdate.Count > 0)
+            {
+                lastDialog.MessageText += completionUpdate.ContentUpdate[0].Text;
+                lastDialog.MessageText = ConvertMarkdownToHTML(lastDialog.MessageText);
+                StateHasChanged();
+                JSRuntime.InvokeVoidAsync("scrollToBottom");
+                Thread.Sleep(100);
+            }
+
+        }
+
+    }
+
+    private async void AskOpenAIStreamingAsync()
+    {
+        _myPrompt = _userInput; // Read value from the input field to the prompt variable
+                                // Create a dialog to store the user prompt
+        dialogs.Add(new Dialog
+            {
+                MessageText = _myPrompt, // Add the prompt to the dialogs list
+                IsPrompt = true // This is a user prompt, not a bot response
+            });
+        _userInput = ""; // clear the input field
+        dialogs.Add(new Dialog
+            {
+                MessageText = "", // Add an empty message to the dialogs list
+                IsPrompt = false // This is a bot response, not a user prompt
+            });
+        lastDialog = dialogs.LastOrDefault();
+        var response = GPTService.GetStreamingResponseAsync(_myPrompt); // Call the GPT service to get the response
+        await foreach (StreamingChatCompletionUpdate completionUpdate in response)
+        {
+            if (completionUpdate.ContentUpdate.Count > 0)
+            {
+                lastDialog.MessageText += completionUpdate.ContentUpdate[0].Text;
+                lastDialog.MessageText = ConvertMarkdownToHTML(lastDialog.MessageText);
+                StateHasChanged();
+                await JSRuntime.InvokeVoidAsync("scrollToBottom");
+                Thread.Sleep(100);
+            }
+
+            if (completionUpdate.FinishReason != null)
+            {
+                switch (completionUpdate.FinishReason)
+                {
+                    case ChatFinishReason.Length:
+                        lastDialog.MessageText += "<br /><hr />";
+                        lastDialog.MessageText += $"<p style='color:red;'>Finish reason = <b><i>{completionUpdate.FinishReason}</i></b></p>";
+                        lastDialog.MessageText += "<hr />";
+                        break;
+                    case ChatFinishReason.Stop:
+                    default:
+                        lastDialog.MessageText += "<br /><hr />";
+                        lastDialog.MessageText += $"<p style='color:blue;'>Finish reason = <b><i>{completionUpdate.FinishReason}</i></b></p>";
+                        lastDialog.MessageText += "<hr />";
+                        break;
+                }
+                StateHasChanged();
+                await JSRuntime.InvokeVoidAsync("scrollToBottom");
+            }
+
+            if (completionUpdate.Usage != null)
+            {
+                lastDialog.MessageText += "<p style='color:green;'>";
+                lastDialog.MessageText += $"Prompt Token = <b><i>{completionUpdate.Usage.InputTokenCount}</i></b><br />";
+                lastDialog.MessageText += $"Completion Token = <b><i>{completionUpdate.Usage.OutputTokenCount}</i></b><br />";
+                lastDialog.MessageText += $"Total Token = <b><i>{completionUpdate.Usage.TotalTokenCount}</i></b></p>";
+                lastDialog.MessageText += "<hr />";
+                StateHasChanged();
+                await JSRuntime.InvokeVoidAsync("scrollToBottom");
+            }
+
+        }
+
+    }
+    #endregion
+
+}

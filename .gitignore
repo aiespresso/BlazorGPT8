@@ -1,0 +1,40 @@
+# Visual Studio / .NET
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build output
+[Bb]in/
+[Oo]bj/
+out/
+publish/
+publish_output/
+runtimes/
+
+# NuGet
+*.nupkg
+packages/
+
+# Rider
+.idea/
+
+# Logs
+*.log
+
+# OS generated files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Test results
+TestResults/
+*.trx
+
+# Dotnet user secrets
+secrets.json
+
+# Static web assets and build artifacts
+*.staticwebassets.*.json
