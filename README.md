@@ -1,3 +1,7 @@
+## This app is a test program of this video.
+
+[Watch the video](https://youtu.be/Elt6gOuwujM?si=0_fQu4FkGaBmKKDj)
+
 # BlazorGPT8
 
 A Blazor Server web application built with **.NET 8** that provides a real-time interactive chat interface powered by **OpenAI GPT** models.
